@@ -1,1 +1,27 @@
 data/
+
+# Cache directories
+*cache*/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Training outputs
+outputs/
+*.log
+*.pt
+*.pth
+*.bin
+*_lora/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db

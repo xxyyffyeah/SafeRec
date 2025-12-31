@@ -1,0 +1,20 @@
+# Core ML frameworks
+torch>=2.0.0
+transformers>=4.40.0
+datasets>=2.18.0
+trl>=0.8.0
+
+# Unsloth for efficient fine-tuning
+unsloth[colab-new] @ git+https://github.com/unslothai/unsloth.git
+
+# VLLM for fast inference
+vllm>=0.4.0
+
+# Data processing
+pandas>=2.0.0
+numpy>=1.24.0
+
+# Additional utilities
+accelerate>=0.27.0
+peft>=0.10.0
+bitsandbytes>=0.42.0
