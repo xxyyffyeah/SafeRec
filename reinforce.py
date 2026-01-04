@@ -1,16 +1,17 @@
 from unsloth import FastLanguageModel
 import torch
 from utils.rewards import *
+from utils.data_loader import load_and_prepare_dataset
 max_seq_length = 2048 # Can increase for longer reasoning traces
 lora_rank = 256 # Larger rank = smarter, but slower
 
 model, tokenizer = FastLanguageModel.from_pretrained(
     model_name = "unsloth/Qwen3-4B-Instruct-2507",
     max_seq_length = max_seq_length,
-    load_in_4bit = False, # False for LoRA 16bit
-    fast_inference = True, # Enable vLLM fast inference
+    load_in_4bit = False, # Use 4bit to reduce memory
+    fast_inference = False, # Disable vLLM due to CUDA dependency issues
     max_lora_rank = lora_rank,
-    gpu_memory_utilization = 0.9, # Reduce if out of memory
+    # gpu_memory_utilization = 0.9, # Only used with vLLM
 )
 
 model = FastLanguageModel.get_peft_model(
@@ -26,61 +27,13 @@ model = FastLanguageModel.get_peft_model(
 )
 
 # dataset
-from datasets import load_dataset
 import pandas as pd
 import numpy as np
 
-dataset = load_dataset("Dionysianspirit/reddit-movie-rec-sft", split = "train")
-# dataset = load_dataset("Dionysianspirit/movie-sensitivity-warnings", split = "train")
-# dataset = load_dataset("Dionysianspirit/reddit-movie-entity2id", split = "train")
-
-
-# def format_dataset(x):
-#     expected_answer = x["expected_answer"]
-#     problem = x["problem"]
-
-#     # Remove generated <think> and </think>
-#     thoughts = x["generated_solution"]
-#     thoughts = thoughts.replace("<think>", "").replace("</think>", "")
-
-#     # Strip newlines on left and right
-#     thoughts = thoughts.strip()
-#     # Add our custom formatting
-#     final_prompt = \
-#         reasoning_start + thoughts + reasoning_end + \
-#         solution_start + expected_answer + solution_end
-#     return [
-#         {"role" : "system",    "content" : system_prompt},
-#         {"role" : "user",      "content" : problem},
-#         {"role" : "assistant", "content" : final_prompt},
-#     ]
-
-# dataset["Messages"] = dataset.apply(format_dataset, axis = 1)
-
-# import re
-
-# # Add optional EOS token matching
-# solution_end_regex = r"</SOLUTION>[\s]{0,}" + \
-#     "(?:" + re.escape(tokenizer.eos_token) + ")?"
-
-# match_format = re.compile(
-#     rf"{reasoning_end}.*?"\
-#     rf"{solution_start}(.+?){solution_end_regex}"\
-#     rf"[\s]{{0,}}$",
-#     flags = re.MULTILINE | re.DOTALL
-# )
-
-
-
-dataset = dataset.map(lambda x: {
-    "prompt" : [
-        {"role": "system", "content": system_prompt},
-        {"role": "user",   "content": x["prompt"]},
-    ],
-    "answer": extract_hash_answer(x["solution"]),
-    "avoid_content": x["avoid_content"],
-    "ground_truth_imdb_ids": x["ground_truth_imdb_ids"],
-})
+# Load and prepare dataset using shared utility
+# Note: We'll do the train/test split after length filtering for training
+dataset = load_and_prepare_dataset(test_size=300, seed=3407)
+combined_dataset = dataset["train"]  # Start with train split before length filtering
 
 import re
 
@@ -98,7 +51,7 @@ match_numbers = re.compile(
     solution_start + r".*?[\s]{0,}([-]?[\d\.\,]{1,})",
     flags = re.MULTILINE | re.DOTALL
 )
-tokenized = dataset.map(
+tokenized = combined_dataset.map(
     lambda x: {"tokens" : tokenizer.apply_chat_template(x["prompt"], add_generation_prompt = True, tokenize = True)},
     batched = True,
 )
@@ -112,14 +65,14 @@ maximum_length = int(np.quantile(tokenized["L"], 0.9))
 print("Max Length = ", maximum_length)
 
 # Filter only samples smaller than 90% max length
-dataset = dataset.select(np.where(np.array(tokenized["L"]) <= maximum_length)[0])
+filtered_dataset = combined_dataset.select(np.where(np.array(tokenized["L"]) <= maximum_length)[0])
 del tokenized
 
-# Split dataset: 300 samples for testing, rest for training
-dataset = dataset.train_test_split(test_size=300, seed=3407)
-train_dataset = dataset["train"]
+# For training, use the filtered dataset
+train_dataset = filtered_dataset
+# For evaluation, use the original test split (without length filtering)
 eval_dataset = dataset["test"]
-print(f"Training samples: {len(train_dataset)}")
+print(f"Training samples (after length filtering): {len(train_dataset)}")
 print(f"Evaluation samples: {len(eval_dataset)}")
 
 max_prompt_length = maximum_length + 1 # + 1 just in case!
@@ -158,7 +111,7 @@ training_args = GRPOConfig(
 
     # Enable training + evaluation
     fp16_full_eval = True,
-    per_device_eval_batch_size = 1,
+    per_device_eval_batch_size = 4,  # Must be divisible by num_generations (4)
     eval_accumulation_steps = 1,
     eval_strategy = "steps",
     eval_steps = 50,  # Evaluate every 50 steps
@@ -192,7 +145,7 @@ trainer.train()
 #     lora_request = None,
 # )[0].outputs[0].text
 
-model.save_lora("safe_rec_lora")
+# model.save_lora("safe_rec_lora")
 # Merge to 16bit
 if False: model.save_pretrained_merged("model", tokenizer, save_method = "merged_16bit",)
 if False: model.push_to_hub_merged("hf/model", tokenizer, save_method = "merged_16bit", token = "")

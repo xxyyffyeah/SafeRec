@@ -16,6 +16,9 @@ outputs/
 *.bin
 *_lora/
 
+# Evaluation results
+eval_results*/
+
 # IDE
 .vscode/
 .idea/
