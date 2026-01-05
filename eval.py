@@ -23,8 +23,9 @@ from tqdm import tqdm
 # Import utilities
 from utils.rewards import *
 from utils.data_loader import load_eval_dataset
+from utils.movie_mapper import extract_imdb_ids_from_titles
 from unsloth import FastLanguageModel
-from vllm import SamplingParams
+# from vllm import SamplingParams
 
 # ==================== Configuration ====================
 def parse_args():
@@ -118,8 +119,8 @@ def evaluate_sample(model, tokenizer, sample):
     # Decode response
     generated_text = tokenizer.decode(outputs[0][inputs.shape[1]:], skip_special_tokens=True)
 
-    # Extract IMDB IDs from response
-    predicted_ids = extract_imdb_ids_from_response(generated_text)
+    # Extract titles and map to IMDB IDs using fuzzy matching
+    predicted_ids, extracted_titles, mapping_stats = extract_imdb_ids_from_titles(generated_text)
 
     # Calculate individual rewards
     # Wrap in lists for batch processing compatibility
@@ -146,7 +147,9 @@ def evaluate_sample(model, tokenizer, sample):
         },
         "prediction": {
             "full_response": generated_text,
+            "extracted_titles": extracted_titles,
             "extracted_imdb_ids": predicted_ids,
+            "mapping_stats": mapping_stats,
         },
         "scores": {
             "safety": float(safety_score),
@@ -159,6 +162,7 @@ def evaluate_sample(model, tokenizer, sample):
             "num_ground_truth_movies": len(sample["ground_truth_imdb_ids"]),
             "num_correct_predictions": len(set(predicted_ids) & set(sample["ground_truth_imdb_ids"])),
             "response_length": len(generated_text),
+            "title_extraction_success_rate": mapping_stats["mapped_count"] / mapping_stats["total_titles"] if mapping_stats["total_titles"] > 0 else 0,
         }
     }
 
@@ -212,6 +216,11 @@ def analyze_results(results):
     total_correct = sum(r["analysis"]["num_correct_predictions"] for r in results)
     avg_response_len = sum(r["analysis"]["response_length"] for r in results) / total
 
+    # Title extraction and mapping statistics
+    total_titles_extracted = sum(r["prediction"]["mapping_stats"]["total_titles"] for r in results)
+    total_titles_mapped = sum(r["prediction"]["mapping_stats"]["mapped_count"] for r in results)
+    avg_title_extraction_rate = sum(r["analysis"]["title_extraction_success_rate"] for r in results) / total
+
     # Score distributions
     safety_scores = [r["scores"]["safety"] for r in results]
     accuracy_scores = [r["scores"]["accuracy"] for r in results]
@@ -239,6 +248,12 @@ def analyze_results(results):
             "avg_ground_truth_movies": avg_ground_truth,
             "total_correct_predictions": total_correct,
             "avg_response_length": avg_response_len,
+        },
+        "title_mapping_stats": {
+            "total_titles_extracted": total_titles_extracted,
+            "total_titles_mapped": total_titles_mapped,
+            "overall_mapping_rate": total_titles_mapped / total_titles_extracted if total_titles_extracted > 0 else 0,
+            "avg_mapping_rate_per_sample": avg_title_extraction_rate,
         },
         "score_distribution": {
             "safety": {
@@ -299,6 +314,14 @@ def generate_markdown_report(results, stats, output_dir, model_path):
     report_lines.append(f"- **Average Ground Truth Movies**: {pred_stats['avg_ground_truth_movies']:.2f}")
     report_lines.append(f"- **Total Correct Predictions**: {pred_stats['total_correct_predictions']}")
     report_lines.append(f"- **Average Response Length**: {pred_stats['avg_response_length']:.0f} characters")
+
+    # Title Mapping Statistics
+    report_lines.append("\n## Title Mapping Statistics\n")
+    mapping_stats = stats["title_mapping_stats"]
+    report_lines.append(f"- **Total Titles Extracted**: {mapping_stats['total_titles_extracted']}")
+    report_lines.append(f"- **Total Titles Mapped to IMDB IDs**: {mapping_stats['total_titles_mapped']}")
+    report_lines.append(f"- **Overall Mapping Success Rate**: {mapping_stats['overall_mapping_rate']:.2%}")
+    report_lines.append(f"- **Average Mapping Rate per Sample**: {mapping_stats['avg_mapping_rate_per_sample']:.2%}")
 
     # Score Breakdown Analysis
     report_lines.append("\n## Score Breakdown Analysis\n")
@@ -443,21 +466,6 @@ def main():
     # Generate markdown report
     report_path = generate_markdown_report(results, stats, output_dir, args.model)
 
-    # Print summary
-    print(f"\n{'='*80}")
-    print("EVALUATION COMPLETE")
-    print(f"{'='*80}")
-    print(f"\nTotal Samples: {stats['total_samples']}")
-    print(f"\nAverage Scores:")
-    print(f"  Safety:   {stats['average_scores']['safety']:.4f}")
-    print(f"  Accuracy: {stats['average_scores']['accuracy']:.4f}")
-    print(f"  Coverage: {stats['average_scores']['coverage']:.4f}")
-    print(f"  Final:    {stats['average_scores']['final']:.4f}")
-    print(f"\nResults saved to: {output_dir}/")
-    print(f"  - Individual results: sample_*.json")
-    print(f"  - Aggregated stats: aggregated_statistics.json")
-    print(f"  - Summary report: evaluation_summary.md")
-    print(f"\n{'='*80}\n")
 
 
 if __name__ == "__main__":

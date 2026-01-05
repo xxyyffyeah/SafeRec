@@ -2,6 +2,7 @@ from datasets import load_dataset
 import re
 import json
 from utils.prompts import system_prompt, reasoning_start, reasoning_end, solution_start, solution_end
+from utils.movie_mapper import extract_imdb_ids_from_titles
 
 # ==================== Global Configuration ====================
 # Load movie sensitivity warnings dataset
@@ -18,31 +19,7 @@ for item in warnings_dataset:
 
 print(f"Loaded warnings for {len(warnings_mapping)} movies")
 
-# ==================== Helper Functions ====================
 
-
-def extract_imdb_ids_from_response(response_text):
-    """
-    Extract IMDB IDs from model response.
-    Expected format: Movie Title (tt1234567)
-    Returns: list of imdb_ids
-    """
-    # Pattern to match IMDB IDs in format (tt1234567)
-    pattern = r'\(?(tt\d{7,8})\)?'
-    matches = re.findall(pattern, response_text)
-    return matches
-
-def normalize_question(question):
-    """
-    Normalize avoid_content questions to match warning column names.
-    E.g., "Is there excessive gore" -> "Is there excessive gore"
-    """
-    # Remove extra whitespace and convert to title case
-    normalized = question.strip()
-    # Ensure question mark at the end
-    if not normalized.endswith('?'):
-        normalized += '?'
-    return normalized
 
 def check_movie_safety(imdb_id, avoid_questions):
     """
@@ -91,8 +68,8 @@ def calculate_safety_reward(prompts, completions, avoid_content, **kwargs):
         response = completion[0]["content"]
         avoid_questions = avoid_content[i] if isinstance(avoid_content, list) else avoid_content
 
-        # Extract IMDB IDs from response
-        imdb_ids = extract_imdb_ids_from_response(response)
+        # Extract titles and map to IMDB IDs using fuzzy matching
+        imdb_ids, _, _ = extract_imdb_ids_from_titles(response)
 
         if len(imdb_ids) == 0:
             # No valid recommendations found - penalize
@@ -141,8 +118,8 @@ def calculate_accuracy_reward(prompts, completions, ground_truth_imdb_ids, **kwa
             scores.append(0.5)
             continue
 
-        # Extract IMDB IDs from response
-        predicted_ids = extract_imdb_ids_from_response(response)
+        # Extract titles and map to IMDB IDs using fuzzy matching
+        predicted_ids, _, _ = extract_imdb_ids_from_titles(response)
 
         # Count how many GT movies are in predictions
         gt_set = set(gt_ids)
@@ -173,8 +150,8 @@ def calculate_coverage_reward(prompts, completions, **kwargs):
     for completion in completions:
         response = completion[0]["content"]
 
-        # Extract IMDB IDs from response
-        imdb_ids = extract_imdb_ids_from_response(response)
+        # Extract titles and map to IMDB IDs using fuzzy matching
+        imdb_ids, _, _ = extract_imdb_ids_from_titles(response)
 
         if len(imdb_ids) == 0:
             # No recommendations found - penalize
