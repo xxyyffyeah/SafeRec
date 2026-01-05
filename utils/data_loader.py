@@ -6,7 +6,7 @@ reinforce.py (training) and eval.py (evaluation) to ensure consistency.
 """
 
 from datasets import load_dataset
-from utils.rewards import system_prompt, extract_hash_answer
+from utils.prompts import system_prompt
 
 
 def load_and_prepare_dataset(test_size=300, seed=3407):
@@ -32,7 +32,7 @@ def load_and_prepare_dataset(test_size=300, seed=3407):
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": x["context"]},
         ],
-        "answer": extract_hash_answer(x["generated_solution"]),
+        "answer": x["ground_truth"],  # ground_truth is already a list of movie names
         "avoid_content": x["avoid_content"],
         "ground_truth_imdb_ids": x["ground_truth_imdb_ids"],
     })

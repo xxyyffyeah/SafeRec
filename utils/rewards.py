@@ -1,6 +1,7 @@
 from datasets import load_dataset
 import re
 import json
+from utils.prompts import system_prompt, reasoning_start, reasoning_end, solution_start, solution_end
 
 # ==================== Global Configuration ====================
 # Load movie sensitivity warnings dataset
@@ -17,31 +18,8 @@ for item in warnings_dataset:
 
 print(f"Loaded warnings for {len(warnings_mapping)} movies")
 
-# Global variables for formatting (will be set from reinforce.py)
-reasoning_start = "<REASONING>"
-reasoning_end = "</REASONING>"
-solution_start = "<SOLUTION>"
-solution_end = "</SOLUTION>"
-
-system_prompt = """You are a helpful movie recommendation assistant. Given a user's movie preferences and content sensitivities, provide personalized movie recommendations.
-
-Your response MUST follow this exact format:
-<REASONING>
-[Your reasoning process here]
-</REASONING>
-<SOLUTION>
-[List of recommended movies with IMDB IDs in format: Movie Title (tt1234567)]
-</SOLUTION>"""
-
 # ==================== Helper Functions ====================
 
-def extract_hash_answer(solution_text):
-    """Extract movie recommendations from solution text"""
-    # Try to extract content between <SOLUTION> tags
-    match = re.search(r'<SOLUTION>(.*?)</SOLUTION>', solution_text, re.DOTALL)
-    if match:
-        return match.group(1).strip()
-    return solution_text.strip()
 
 def extract_imdb_ids_from_response(response_text):
     """
