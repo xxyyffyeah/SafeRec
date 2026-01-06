@@ -30,11 +30,12 @@ def load_and_prepare_dataset(test_size=300, seed=3407):
     dataset = dataset.map(lambda x: {
         "prompt": [
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": x["context"]},
+            {"role": "user", "content": f"USER TRAIT: {x['assigned_trait']}\n\n{x['context']}"},
         ],
         "answer": x["ground_truth"],  # ground_truth is already a list of movie names
         "avoid_content": x["avoid_content"],
         "ground_truth_imdb_ids": x["ground_truth_imdb_ids"],
+        "assigned_trait": x["assigned_trait"],  # Keep trait for reference
     })
 
     # Split dataset: test_size samples for testing, rest for training

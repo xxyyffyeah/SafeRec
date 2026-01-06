@@ -38,19 +38,19 @@ combined_dataset = dataset["train"]  # Start with train split before length filt
 import re
 
 # Add optional EOS token matching
-solution_end_regex = r"</SOLUTION>[\s]{0,}" + \
-    "(?:" + re.escape(tokenizer.eos_token) + ")?"
+# solution_end_regex = r"</SOLUTION>[\s]{0,}" + \
+#     "(?:" + re.escape(tokenizer.eos_token) + ")?"
 
-match_format = re.compile(
-    rf"{reasoning_end}.*?"\
-    rf"{solution_start}(.+?){solution_end_regex}"\
-    rf"[\s]{{0,}}$",
-    flags = re.MULTILINE | re.DOTALL
-)
-match_numbers = re.compile(
-    solution_start + r".*?[\s]{0,}([-]?[\d\.\,]{1,})",
-    flags = re.MULTILINE | re.DOTALL
-)
+# match_format = re.compile(
+#     rf"{reasoning_end}.*?"\
+#     rf"{solution_start}(.+?){solution_end_regex}"\
+#     rf"[\s]{{0,}}$",
+#     flags = re.MULTILINE | re.DOTALL
+# )
+# match_numbers = re.compile(
+#     solution_start + r".*?[\s]{0,}([-]?[\d\.\,]{1,})",
+#     flags = re.MULTILINE | re.DOTALL
+# )
 tokenized = combined_dataset.map(
     lambda x: {"tokens" : tokenizer.apply_chat_template(x["prompt"], add_generation_prompt = True, tokenize = True)},
     batched = True,
@@ -99,22 +99,22 @@ training_args = GRPOConfig(
     optim = "adamw_8bit",
     logging_steps = 1,
     per_device_train_batch_size = 1,
-    gradient_accumulation_steps = 1, # Increase to 4 for smoother training
+    gradient_accumulation_steps = 4, # Increase to 4 for smoother training
     num_generations = 4, # Decrease if out of memory
     max_prompt_length = max_prompt_length,
     max_completion_length = max_completion_length,
-    # num_train_epochs = 1, # Set to 1 for a full training run
-    max_steps = 100,
-    save_steps = 100,
+    num_train_epochs = 1, # Set to 1 for a full training run
+    max_steps = 2000,
+    save_steps = 500,
     report_to = "none", # Can use Weights & Biases
-    output_dir = "outputs",
+    output_dir = "outputs_3_full",
 
-    # Enable training + evaluation
-    fp16_full_eval = True,
-    per_device_eval_batch_size = 4,  # Must be divisible by num_generations (4)
-    eval_accumulation_steps = 1,
-    eval_strategy = "steps",
-    eval_steps = 50,  # Evaluate every 50 steps
+    # # Enable training + evaluation
+    # fp16_full_eval = True,
+    # per_device_eval_batch_size = 4,  # Must be divisible by num_generations (4)
+    # eval_accumulation_steps = 1,
+    # eval_strategy = "steps",
+    # eval_steps = 50,  # Evaluate every 50 steps
 )
 
 trainer = GRPOTrainer(

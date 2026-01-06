@@ -18,6 +18,7 @@ outputs/
 
 # Evaluation results
 eval_results*/
+outputs*/
 
 # IDE
 .vscode/

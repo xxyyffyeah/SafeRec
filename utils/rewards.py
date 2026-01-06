@@ -189,7 +189,7 @@ def calculate_final_reward(prompts, completions, avoid_content, ground_truth_imd
     # Combine with weights: 0.7 × Safety + 0.2 × Accuracy + 0.1 × Coverage
     final_scores = []
     for safety, accuracy, coverage in zip(safety_scores, accuracy_scores, coverage_scores):
-        final_score = 0.7 * safety + 0.2 * accuracy + 0.1 * coverage
+        final_score = 0.2 * safety + 0.7 * accuracy + 0.1 * coverage
         # Scale to larger reward range (optional, for better training signal)
         final_score = final_score * 10.0  # Scale from [0,1] to [0,10]
         final_scores.append(final_score)

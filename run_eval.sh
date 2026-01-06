@@ -14,6 +14,7 @@ BASE_MODEL="unsloth/Qwen3-4B-Instruct-2507"
 CHECKPOINT="outputs/checkpoint-100"
 NUM_SAMPLES=""
 OUTPUT_DIR="eval_results"
+EVAL_MODE="both"  # Options: both, base, checkpoint
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -49,24 +50,39 @@ while [[ $# -gt 0 ]]; do
             echo "Full mode: Evaluating all 300 samples"
             shift
             ;;
+        --base-only)
+            EVAL_MODE="base"
+            shift
+            ;;
+        --checkpoint-only)
+            EVAL_MODE="checkpoint"
+            shift
+            ;;
+        --both)
+            EVAL_MODE="both"
+            shift
+            ;;
         --help|-h)
             echo "Usage: ./run_eval.sh [OPTIONS]"
             echo ""
             echo "Options:"
-            echo "  --checkpoint PATH    Checkpoint directory (default: outputs/checkpoint-100)"
-            echo "  --base_model NAME    Base model name (default: unsloth/Qwen2.5-1.5B)"
-            echo "  --num_samples N      Number of samples to evaluate"
-            echo "  --output_dir DIR     Output directory (default: eval_results)"
-            echo "  --quick              Evaluate 10 samples (for quick testing)"
-            echo "  --medium             Evaluate 50 samples"
-            echo "  --full               Evaluate all 300 samples (default)"
-            echo "  --help, -h           Show this help message"
+            echo "  --checkpoint PATH      Checkpoint directory (default: outputs/checkpoint-100)"
+            echo "  --base_model NAME      Base model name (default: unsloth/Qwen3-4B-Instruct-2507)"
+            echo "  --num_samples N        Number of samples to evaluate"
+            echo "  --output_dir DIR       Output directory (default: eval_results)"
+            echo "  --quick                Evaluate 10 samples (for quick testing)"
+            echo "  --medium               Evaluate 50 samples"
+            echo "  --full                 Evaluate all 300 samples (default)"
+            echo "  --base-only            Evaluate only base model"
+            echo "  --checkpoint-only      Evaluate only checkpoint model"
+            echo "  --both                 Evaluate both models (default)"
+            echo "  --help, -h             Show this help message"
             echo ""
             echo "Examples:"
-            echo "  ./run_eval.sh --quick                              # Quick test"
-            echo "  ./run_eval.sh --medium                             # Medium test"
-            echo "  ./run_eval.sh --full                               # Full evaluation"
-            echo "  ./run_eval.sh --checkpoint outputs/checkpoint-200  # Custom checkpoint"
+            echo "  ./run_eval.sh --quick                                  # Quick test both models"
+            echo "  ./run_eval.sh --checkpoint-only --medium               # Evaluate checkpoint only, 50 samples"
+            echo "  ./run_eval.sh --base-only --full                       # Evaluate base only, all samples"
+            echo "  ./run_eval.sh --checkpoint outputs/checkpoint-200      # Evaluate both with custom checkpoint"
             exit 0
             ;;
         *)
@@ -84,8 +100,13 @@ if [ -n "$NUM_SAMPLES" ]; then
 fi
 
 echo "Configuration:"
-echo "  Base Model:  $BASE_MODEL"
-echo "  Checkpoint:  $CHECKPOINT"
+echo "  Eval Mode:   $EVAL_MODE"
+if [ "$EVAL_MODE" == "base" ] || [ "$EVAL_MODE" == "both" ]; then
+    echo "  Base Model:  $BASE_MODEL"
+fi
+if [ "$EVAL_MODE" == "checkpoint" ] || [ "$EVAL_MODE" == "both" ]; then
+    echo "  Checkpoint:  $CHECKPOINT"
+fi
 echo "  Output Dir:  $OUTPUT_DIR"
 if [ -n "$NUM_SAMPLES" ]; then
     echo "  Num Samples: $NUM_SAMPLES"
@@ -94,19 +115,30 @@ else
 fi
 echo ""
 
+# Calculate number of models to evaluate
+NUM_MODELS=0
+if [ "$EVAL_MODE" == "base" ] || [ "$EVAL_MODE" == "both" ]; then
+    NUM_MODELS=$((NUM_MODELS + 1))
+fi
+if [ "$EVAL_MODE" == "checkpoint" ] || [ "$EVAL_MODE" == "both" ]; then
+    NUM_MODELS=$((NUM_MODELS + 1))
+fi
+
 # Estimate time
 if [ -z "$NUM_SAMPLES" ]; then
     echo "Estimated time per model: 2.5 - 5 hours"
-    echo "Total estimated time: 5 - 10 hours"
+    TOTAL_MIN=$((NUM_MODELS * 150))
+    TOTAL_MAX=$((NUM_MODELS * 300))
+    echo "Total estimated time: $((TOTAL_MIN / 60)) - $((TOTAL_MAX / 60)) hours"
 elif [ "$NUM_SAMPLES" -le 10 ]; then
     echo "Estimated time per model: 5 - 10 minutes"
-    echo "Total estimated time: 10 - 20 minutes"
+    echo "Total estimated time: $((NUM_MODELS * 5)) - $((NUM_MODELS * 10)) minutes"
 elif [ "$NUM_SAMPLES" -le 50 ]; then
     echo "Estimated time per model: 25 - 50 minutes"
-    echo "Total estimated time: 50 - 100 minutes"
+    echo "Total estimated time: $((NUM_MODELS * 25)) - $((NUM_MODELS * 50)) minutes"
 else
     MINS_PER=$((NUM_SAMPLES * 6 / 60))
-    MINS_TOTAL=$((MINS_PER * 2))
+    MINS_TOTAL=$((MINS_PER * NUM_MODELS))
     echo "Estimated time per model: ~$MINS_PER - $((MINS_PER * 2)) minutes"
     echo "Total estimated time: ~$MINS_TOTAL - $((MINS_TOTAL * 2)) minutes"
 fi
@@ -152,15 +184,19 @@ run_eval() {
 }
 
 # Evaluate Base Model
-run_eval "$BASE_MODEL" "eval_base.log" "Base Model"
+if [ "$EVAL_MODE" == "base" ] || [ "$EVAL_MODE" == "both" ]; then
+    run_eval "$BASE_MODEL" "eval_base.log" "Base Model"
+fi
 
 # Evaluate Checkpoint
-if [ -d "$CHECKPOINT" ]; then
-    run_eval "$CHECKPOINT" "eval_checkpoint.log" "Checkpoint Model"
-else
-    echo ""
-    echo "Warning: Checkpoint directory not found: $CHECKPOINT"
-    echo "Skipping checkpoint evaluation."
+if [ "$EVAL_MODE" == "checkpoint" ] || [ "$EVAL_MODE" == "both" ]; then
+    if [ -d "$CHECKPOINT" ]; then
+        run_eval "$CHECKPOINT" "eval_checkpoint.log" "Checkpoint Model"
+    else
+        echo ""
+        echo "Warning: Checkpoint directory not found: $CHECKPOINT"
+        echo "Skipping checkpoint evaluation."
+    fi
 fi
 
 # Summary
