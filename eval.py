@@ -162,7 +162,7 @@ def evaluate_sample(model, tokenizer, sample):
             "num_ground_truth_movies": len(sample["ground_truth_imdb_ids"]),
             "num_correct_predictions": len(set(predicted_ids) & set(sample["ground_truth_imdb_ids"])),
             "response_length": len(generated_text),
-            "title_extraction_success_rate": mapping_stats["mapped_count"] / mapping_stats["total_titles"] if mapping_stats["total_titles"] > 0 else 0,
+            "title_extraction_success_rate": mapping_stats["mapped"] / mapping_stats["total_titles"] if mapping_stats["total_titles"] > 0 else 0,
         }
     }
 
@@ -218,7 +218,7 @@ def analyze_results(results):
 
     # Title extraction and mapping statistics
     total_titles_extracted = sum(r["prediction"]["mapping_stats"]["total_titles"] for r in results)
-    total_titles_mapped = sum(r["prediction"]["mapping_stats"]["mapped_count"] for r in results)
+    total_titles_mapped = sum(r["prediction"]["mapping_stats"]["mapped"] for r in results)
     avg_title_extraction_rate = sum(r["analysis"]["title_extraction_success_rate"] for r in results) / total
 
     # Score distributions
